@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import {
   View,
   Text,
@@ -13,6 +13,8 @@ import { SafeAreaView } from "react-native-safe-area-context";
 import { useAuth } from "../../hooks/useAuth";
 import { Button } from "../../components/ui/Button";
 import { APP } from "../../lib/constants";
+import { usePrivacyStore } from "../../lib/store";
+import { PrivacySettings } from "../../components/privacy/PrivacySettings";
 
 type LanguageOption = "en" | "zh";
 
@@ -21,9 +23,15 @@ export default function ProfileScreen() {
   const { user, isAuthenticated, logout } = useAuth();
 
   const [wifiOnly, setWifiOnly] = useState(true);
-  const [faceBlur, setFaceBlur] = useState(true);
   const [language, setLanguage] = useState<LanguageOption>("en");
   const [pushNotifications, setPushNotifications] = useState(true);
+
+  const { loadFromStorage } = usePrivacyStore();
+
+  // Load persisted privacy settings into Zustand store on mount
+  useEffect(() => {
+    loadFromStorage();
+  }, [loadFromStorage]);
 
   // Not authenticated view
   if (!isAuthenticated || !user) {
@@ -133,19 +141,6 @@ export default function ProfileScreen() {
             />
             <View style={styles.settingDivider} />
             <SettingRow
-              icon="eye-off-outline"
-              label="Face blur"
-              rightElement={
-                <Switch
-                  value={faceBlur}
-                  onValueChange={setFaceBlur}
-                  trackColor={{ false: "#E2E8F0", true: "#93C5FD" }}
-                  thumbColor={faceBlur ? "#3B82F6" : "#CBD5E1"}
-                />
-              }
-            />
-            <View style={styles.settingDivider} />
-            <SettingRow
               icon="language-outline"
               label="Language"
               rightElement={
@@ -200,6 +195,9 @@ export default function ProfileScreen() {
             />
           </View>
         </View>
+
+        {/* Privacy & Face Blur Settings */}
+        <PrivacySettings />
 
         {/* Support */}
         <View style={styles.supportSection}>

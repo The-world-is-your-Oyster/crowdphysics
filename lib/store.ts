@@ -1,5 +1,10 @@
 import { create } from "zustand";
 import type { User, Task, Submission } from "./types";
+import {
+  savePrivacySettings,
+  loadPrivacySettings,
+  type BlurQuality,
+} from "./privacy";
 
 interface AuthState {
   user: User | null;
@@ -79,4 +84,43 @@ export const useSubmissionStore = create<SubmissionState>((set) => ({
         s.id === id ? { ...s, ...updates } : s
       ),
     })),
+}));
+
+// ─── Privacy Settings Store ───────────────────────────────────────────────────
+
+interface PrivacyState {
+  blurOwnFace: boolean;
+  blurQuality: BlurQuality;
+  /** Load persisted settings from SecureStore into this store */
+  loadFromStorage: () => Promise<void>;
+  setBlurOwnFace: (value: boolean) => void;
+  setBlurQuality: (quality: BlurQuality) => void;
+}
+
+export const usePrivacyStore = create<PrivacyState>((set, get) => ({
+  blurOwnFace: true,
+  blurQuality: "standard",
+
+  loadFromStorage: async () => {
+    const settings = await loadPrivacySettings();
+    set({
+      blurOwnFace: settings.blurOwnFace,
+      blurQuality: settings.blurQuality,
+    });
+  },
+
+  setBlurOwnFace: (blurOwnFace: boolean) => {
+    set({ blurOwnFace });
+    // Persist asynchronously — fire-and-forget
+    savePrivacySettings({ blurOwnFace, blurQuality: get().blurQuality }).catch(
+      () => undefined
+    );
+  },
+
+  setBlurQuality: (blurQuality: BlurQuality) => {
+    set({ blurQuality });
+    savePrivacySettings({ blurOwnFace: get().blurOwnFace, blurQuality }).catch(
+      () => undefined
+    );
+  },
 }));
