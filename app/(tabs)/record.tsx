@@ -1,146 +1,235 @@
-import { View, Text, StyleSheet, TouchableOpacity } from "react-native";
+import { useState, useCallback, useEffect } from "react";
+import { View, Text, StyleSheet, TouchableOpacity, Alert } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
 import { SafeAreaView } from "react-native-safe-area-context";
+import { useTaskStore } from "../../lib/store";
+import { useRecording } from "../../hooks/useRecording";
+import { RecordingGuide } from "../../components/recording/RecordingGuide";
+import { RecordingScreen } from "../../components/recording/RecordingScreen";
+import { RecordingPreview } from "../../components/recording/RecordingPreview";
 
-export default function RecordScreen() {
-  return (
-    <SafeAreaView style={styles.container} edges={["bottom"]}>
-      <View style={styles.content}>
-        <View style={styles.cameraPlaceholder}>
-          <Ionicons name="videocam" size={64} color="#94A3B8" />
-          <Text style={styles.placeholderText}>Camera Preview</Text>
-          <Text style={styles.placeholderSubtext}>
-            Select a task first, then start recording
+type RecordingPhase = "guide" | "recording" | "preview";
+
+export default function RecordTab() {
+  const selectedTask = useTaskStore((s) => s.selectedTask);
+  const {
+    isRecording,
+    isCountingDown,
+    countdown,
+    elapsedSeconds,
+    videoUri,
+    cameraFacing,
+    formattedTime,
+    formattedFileSize,
+    durationProgress,
+    isUnderMinDuration,
+    startRecording,
+    stopRecording,
+    switchCamera,
+    reset,
+    cameraRef,
+  } = useRecording();
+
+  const [phase, setPhase] = useState<RecordingPhase>("guide");
+
+  // Transition to preview when videoUri appears (recordAsync resolved)
+  useEffect(() => {
+    if (phase === "recording" && videoUri && !isRecording) {
+      setPhase("preview");
+    }
+  }, [phase, videoUri, isRecording]);
+
+  const handleStartRecording = useCallback(async () => {
+    if (!selectedTask) return;
+    setPhase("recording");
+    // startRecording runs countdown then fires recordAsync (non-blocking)
+    await startRecording(selectedTask.id);
+  }, [selectedTask, startRecording]);
+
+  const handleStopRecording = useCallback(async () => {
+    await stopRecording();
+    // When stopRecording triggers, recordAsync promise will resolve and set videoUri
+    // The useEffect above will detect videoUri + !isRecording and transition to preview
+  }, [stopRecording]);
+
+  const handleReRecord = useCallback(() => {
+    reset();
+    setPhase("guide");
+  }, [reset]);
+
+  const handleSubmit = useCallback(() => {
+    Alert.alert(
+      "Video Saved",
+      "Your recording has been saved locally. Upload functionality will be available in a future update.",
+      [
+        {
+          text: "OK",
+          onPress: () => {
+            reset();
+            setPhase("guide");
+          },
+        },
+      ]
+    );
+  }, [reset]);
+
+  // No task selected - show empty state
+  if (!selectedTask) {
+    return (
+      <SafeAreaView style={styles.emptyContainer} edges={["bottom"]}>
+        <View style={styles.emptyContent}>
+          <View style={styles.emptyIconCircle}>
+            <Ionicons name="videocam" size={48} color="#94A3B8" />
+          </View>
+          <Text style={styles.emptyTitle}>No Task Selected</Text>
+          <Text style={styles.emptySubtitle}>
+            Browse available tasks and tap "Start Recording" to begin capturing
+            video.
           </Text>
-        </View>
-
-        <View style={styles.controls}>
-          <View style={styles.infoRow}>
-            <Ionicons name="information-circle-outline" size={20} color="#64748B" />
-            <Text style={styles.infoText}>
-              Navigate to a task and tap "Start Recording" to begin
+          <TouchableOpacity style={styles.browseButton} disabled>
+            <Ionicons name="list-outline" size={18} color="#64748B" />
+            <Text style={styles.browseButtonText}>
+              Go to Tasks tab to get started
             </Text>
-          </View>
-
-          <TouchableOpacity style={styles.recordButton} disabled>
-            <View style={styles.recordButtonInner}>
-              <View style={styles.recordDot} />
-            </View>
           </TouchableOpacity>
-
-          <View style={styles.statsRow}>
-            <View style={styles.statItem}>
-              <Text style={styles.statValue}>00:00</Text>
-              <Text style={styles.statLabel}>Duration</Text>
-            </View>
-            <View style={styles.statDivider} />
-            <View style={styles.statItem}>
-              <Text style={styles.statValue}>--</Text>
-              <Text style={styles.statLabel}>Task</Text>
-            </View>
-          </View>
         </View>
+      </SafeAreaView>
+    );
+  }
+
+  // Phase: Guide (pre-recording instructions)
+  if (phase === "guide") {
+    return (
+      <SafeAreaView style={styles.safeArea} edges={["bottom"]}>
+        <RecordingGuide
+          taskTitle={selectedTask.title}
+          steps={selectedTask.steps}
+          cameraPosition={selectedTask.camera_position}
+          durationMin={selectedTask.duration_min}
+          durationMax={selectedTask.duration_max}
+          handsRequired={selectedTask.hands_required}
+          onStartRecording={handleStartRecording}
+        />
+      </SafeAreaView>
+    );
+  }
+
+  // Phase: Recording (camera view)
+  if (phase === "recording") {
+    return (
+      <RecordingScreen
+        taskTitle={selectedTask.title}
+        isRecording={isRecording}
+        isCountingDown={isCountingDown}
+        countdown={countdown}
+        elapsedSeconds={elapsedSeconds}
+        formattedTime={formattedTime}
+        durationProgress={durationProgress}
+        isUnderMinDuration={isUnderMinDuration}
+        cameraFacing={cameraFacing}
+        cameraRef={cameraRef}
+        onStartRecording={handleStartRecording}
+        onStopRecording={handleStopRecording}
+        onSwitchCamera={switchCamera}
+      />
+    );
+  }
+
+  // Phase: Preview (review recorded video)
+  if (phase === "preview" && videoUri) {
+    return (
+      <RecordingPreview
+        videoUri={videoUri}
+        durationSeconds={elapsedSeconds}
+        formattedDuration={formattedTime}
+        formattedFileSize={formattedFileSize}
+        onReRecord={handleReRecord}
+        onSubmit={handleSubmit}
+      />
+    );
+  }
+
+  // Fallback: video not ready yet, could happen if recording fails
+  return (
+    <SafeAreaView style={styles.emptyContainer} edges={["bottom"]}>
+      <View style={styles.emptyContent}>
+        <Ionicons name="alert-circle-outline" size={48} color="#F59E0B" />
+        <Text style={styles.emptyTitle}>Recording Issue</Text>
+        <Text style={styles.emptySubtitle}>
+          Something went wrong with the recording. Please try again.
+        </Text>
+        <TouchableOpacity style={styles.retryButton} onPress={handleReRecord}>
+          <Ionicons name="refresh" size={18} color="#FFFFFF" />
+          <Text style={styles.retryButtonText}>Try Again</Text>
+        </TouchableOpacity>
       </View>
     </SafeAreaView>
   );
 }
 
 const styles = StyleSheet.create({
-  container: {
+  safeArea: {
+    flex: 1,
+    backgroundColor: "#F8FAFC",
+  },
+  emptyContainer: {
     flex: 1,
     backgroundColor: "#0F172A",
   },
-  content: {
-    flex: 1,
-    justifyContent: "space-between",
-  },
-  cameraPlaceholder: {
+  emptyContent: {
     flex: 1,
     alignItems: "center",
     justifyContent: "center",
-    backgroundColor: "#1E293B",
-    margin: 20,
-    borderRadius: 16,
-  },
-  placeholderText: {
-    fontSize: 18,
-    fontWeight: "600",
-    color: "#94A3B8",
-    marginTop: 16,
-  },
-  placeholderSubtext: {
-    fontSize: 13,
-    color: "#64748B",
-    marginTop: 8,
-    textAlign: "center",
     paddingHorizontal: 40,
   },
-  controls: {
-    paddingHorizontal: 20,
-    paddingBottom: 20,
-    alignItems: "center",
-  },
-  infoRow: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 8,
-    marginBottom: 24,
+  emptyIconCircle: {
+    width: 80,
+    height: 80,
+    borderRadius: 40,
     backgroundColor: "#1E293B",
-    paddingHorizontal: 16,
-    paddingVertical: 10,
-    borderRadius: 10,
-  },
-  infoText: {
-    fontSize: 13,
-    color: "#94A3B8",
-    flex: 1,
-  },
-  recordButton: {
-    width: 72,
-    height: 72,
-    borderRadius: 36,
-    borderWidth: 4,
-    borderColor: "#475569",
     alignItems: "center",
     justifyContent: "center",
-    marginBottom: 24,
-    opacity: 0.5,
+    marginBottom: 20,
   },
-  recordButtonInner: {
-    width: 56,
-    height: 56,
-    borderRadius: 28,
-    backgroundColor: "#334155",
-    alignItems: "center",
-    justifyContent: "center",
-  },
-  recordDot: {
-    width: 24,
-    height: 24,
-    borderRadius: 12,
-    backgroundColor: "#64748B",
-  },
-  statsRow: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 24,
-  },
-  statItem: {
-    alignItems: "center",
-  },
-  statValue: {
+  emptyTitle: {
     fontSize: 20,
     fontWeight: "700",
     color: "#F8FAFC",
+    marginBottom: 8,
   },
-  statLabel: {
-    fontSize: 12,
-    color: "#64748B",
-    marginTop: 4,
+  emptySubtitle: {
+    fontSize: 14,
+    color: "#94A3B8",
+    textAlign: "center",
+    lineHeight: 20,
+    marginBottom: 24,
   },
-  statDivider: {
-    width: 1,
-    height: 32,
-    backgroundColor: "#334155",
+  browseButton: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8,
+    backgroundColor: "#1E293B",
+    paddingHorizontal: 20,
+    paddingVertical: 12,
+    borderRadius: 10,
+  },
+  browseButtonText: {
+    fontSize: 14,
+    fontWeight: "500",
+    color: "#94A3B8",
+  },
+  retryButton: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8,
+    backgroundColor: "#3B82F6",
+    paddingHorizontal: 24,
+    paddingVertical: 14,
+    borderRadius: 12,
+  },
+  retryButtonText: {
+    fontSize: 16,
+    fontWeight: "700",
+    color: "#FFFFFF",
   },
 });
