@@ -1,65 +1,178 @@
-import { View, Text, TextInput, TouchableOpacity, StyleSheet, KeyboardAvoidingView, Platform } from "react-native";
-import { useRouter } from "expo-router";
 import { useState } from "react";
+import {
+  View,
+  Text,
+  TouchableOpacity,
+  StyleSheet,
+  KeyboardAvoidingView,
+  Platform,
+  ScrollView,
+} from "react-native";
+import { useRouter } from "expo-router";
 import { Ionicons } from "@expo/vector-icons";
+import { Input } from "../../components/ui/Input";
+import { Button } from "../../components/ui/Button";
+import { useAuth } from "../../hooks/useAuth";
+
+const EMAIL_REGEX = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
 export default function LoginScreen() {
   const router = useRouter();
+  const { login, isLoading } = useAuth();
+
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
+  const [errors, setErrors] = useState<{ email?: string; password?: string }>(
+    {}
+  );
+  const [apiError, setApiError] = useState("");
+
+  function validate(): boolean {
+    const newErrors: { email?: string; password?: string } = {};
+
+    if (!email.trim()) {
+      newErrors.email = "Email is required";
+    } else if (!EMAIL_REGEX.test(email.trim())) {
+      newErrors.email = "Please enter a valid email";
+    }
+
+    if (!password) {
+      newErrors.password = "Password is required";
+    } else if (password.length < 6) {
+      newErrors.password = "Password must be at least 6 characters";
+    }
+
+    setErrors(newErrors);
+    return Object.keys(newErrors).length === 0;
+  }
+
+  async function handleLogin() {
+    setApiError("");
+    if (!validate()) return;
+
+    try {
+      await login(email.trim(), password);
+      router.replace("/(tabs)");
+    } catch (err: unknown) {
+      const error = err as { response?: { data?: { detail?: string } } };
+      const message =
+        error?.response?.data?.detail ||
+        "Unable to sign in. Please check your credentials and try again.";
+      setApiError(message);
+    }
+  }
 
   return (
     <KeyboardAvoidingView
       style={styles.container}
       behavior={Platform.OS === "ios" ? "padding" : "height"}
     >
-      <View style={styles.content}>
-        <View style={styles.iconContainer}>
-          <Ionicons name="flask" size={48} color="#3B82F6" />
-        </View>
-        <Text style={styles.title}>Welcome Back</Text>
-        <Text style={styles.subtitle}>Sign in to your CrowdPhysics account</Text>
+      <ScrollView
+        contentContainerStyle={styles.scrollContent}
+        keyboardShouldPersistTaps="handled"
+        showsVerticalScrollIndicator={false}
+      >
+        <View style={styles.content}>
+          {/* Logo / Header */}
+          <View style={styles.iconContainer}>
+            <Ionicons name="flask" size={48} color="#3B82F6" />
+          </View>
+          <Text style={styles.title}>CrowdPhysics</Text>
+          <Text style={styles.subtitle}>
+            Earn money by recording everyday tasks
+          </Text>
 
-        <View style={styles.form}>
-          <View style={styles.inputContainer}>
-            <Ionicons name="mail-outline" size={20} color="#94A3B8" style={styles.inputIcon} />
-            <TextInput
-              style={styles.input}
-              placeholder="Email"
-              placeholderTextColor="#94A3B8"
+          {/* Error Banner */}
+          {apiError ? (
+            <View style={styles.errorBanner}>
+              <Ionicons name="alert-circle" size={18} color="#EF4444" />
+              <Text style={styles.errorBannerText}>{apiError}</Text>
+            </View>
+          ) : null}
+
+          {/* Form */}
+          <View style={styles.form}>
+            <Input
+              label="Email"
+              leftIcon="mail-outline"
+              placeholder="your@email.com"
               value={email}
-              onChangeText={setEmail}
+              onChangeText={(text) => {
+                setEmail(text);
+                if (errors.email) setErrors((prev) => ({ ...prev, email: undefined }));
+              }}
+              error={errors.email}
               keyboardType="email-address"
               autoCapitalize="none"
+              autoComplete="email"
+              returnKeyType="next"
             />
-          </View>
 
-          <View style={styles.inputContainer}>
-            <Ionicons name="lock-closed-outline" size={20} color="#94A3B8" style={styles.inputIcon} />
-            <TextInput
-              style={styles.input}
-              placeholder="Password"
-              placeholderTextColor="#94A3B8"
+            <Input
+              label="Password"
+              leftIcon="lock-closed-outline"
+              placeholder="Enter your password"
               value={password}
-              onChangeText={setPassword}
-              secureTextEntry
+              onChangeText={(text) => {
+                setPassword(text);
+                if (errors.password) setErrors((prev) => ({ ...prev, password: undefined }));
+              }}
+              error={errors.password}
+              isPassword
+              autoComplete="password"
+              returnKeyType="done"
+              onSubmitEditing={handleLogin}
+            />
+
+            <Button
+              title="Sign In"
+              onPress={handleLogin}
+              variant="primary"
+              loading={isLoading}
+              style={styles.signInButton}
             />
           </View>
 
-          <TouchableOpacity style={styles.loginButton}>
-            <Text style={styles.loginButtonText}>Sign In</Text>
-          </TouchableOpacity>
+          {/* Divider */}
+          <View style={styles.divider}>
+            <View style={styles.dividerLine} />
+            <Text style={styles.dividerText}>or</Text>
+            <View style={styles.dividerLine} />
+          </View>
 
+          {/* Social Login */}
+          <View style={styles.socialButtons}>
+            <Button
+              title="Sign in with Google"
+              onPress={() => {}}
+              variant="social"
+              icon="logo-google"
+            />
+
+            {Platform.OS === "ios" ? (
+              <Button
+                title="Sign in with Apple"
+                onPress={() => {}}
+                variant="social"
+                icon="logo-apple"
+                style={styles.appleButton}
+                textStyle={styles.appleButtonText}
+              />
+            ) : null}
+          </View>
+
+          {/* Sign Up Link */}
           <TouchableOpacity
-            style={styles.registerLink}
+            style={styles.switchLink}
             onPress={() => router.replace("/auth/register")}
           >
-            <Text style={styles.registerLinkText}>
-              Don't have an account? <Text style={styles.registerLinkBold}>Sign Up</Text>
+            <Text style={styles.switchLinkText}>
+              Don't have an account?{" "}
+              <Text style={styles.switchLinkBold}>Sign Up</Text>
             </Text>
           </TouchableOpacity>
         </View>
-      </View>
+      </ScrollView>
     </KeyboardAvoidingView>
   );
 }
@@ -69,10 +182,14 @@ const styles = StyleSheet.create({
     flex: 1,
     backgroundColor: "#F8FAFC",
   },
+  scrollContent: {
+    flexGrow: 1,
+  },
   content: {
     flex: 1,
     justifyContent: "center",
     paddingHorizontal: 28,
+    paddingVertical: 40,
   },
   iconContainer: {
     width: 80,
@@ -82,7 +199,7 @@ const styles = StyleSheet.create({
     alignItems: "center",
     justifyContent: "center",
     alignSelf: "center",
-    marginBottom: 24,
+    marginBottom: 16,
   },
   title: {
     fontSize: 28,
@@ -95,50 +212,64 @@ const styles = StyleSheet.create({
     color: "#64748B",
     textAlign: "center",
     marginTop: 8,
-    marginBottom: 32,
+    marginBottom: 28,
   },
-  form: {
-    gap: 14,
-  },
-  inputContainer: {
+  errorBanner: {
     flexDirection: "row",
     alignItems: "center",
-    backgroundColor: "#FFFFFF",
-    borderRadius: 12,
-    borderWidth: 1,
-    borderColor: "#E2E8F0",
-    paddingHorizontal: 14,
+    backgroundColor: "#FEF2F2",
+    borderRadius: 10,
+    padding: 12,
+    marginBottom: 16,
+    gap: 8,
   },
-  inputIcon: {
-    marginRight: 10,
-  },
-  input: {
+  errorBannerText: {
     flex: 1,
-    paddingVertical: 14,
-    fontSize: 16,
-    color: "#0F172A",
+    fontSize: 13,
+    color: "#EF4444",
+    fontWeight: "500",
   },
-  loginButton: {
-    backgroundColor: "#3B82F6",
-    paddingVertical: 16,
-    borderRadius: 12,
+  form: {
+    gap: 16,
+  },
+  signInButton: {
+    marginTop: 4,
+  },
+  divider: {
+    flexDirection: "row",
     alignItems: "center",
-    marginTop: 8,
+    marginVertical: 24,
   },
-  loginButtonText: {
-    fontSize: 16,
-    fontWeight: "700",
+  dividerLine: {
+    flex: 1,
+    height: 1,
+    backgroundColor: "#E2E8F0",
+  },
+  dividerText: {
+    fontSize: 13,
+    color: "#94A3B8",
+    marginHorizontal: 16,
+    fontWeight: "500",
+  },
+  socialButtons: {
+    gap: 12,
+  },
+  appleButton: {
+    backgroundColor: "#000000",
+    borderWidth: 0,
+  },
+  appleButtonText: {
     color: "#FFFFFF",
   },
-  registerLink: {
+  switchLink: {
     alignItems: "center",
-    paddingVertical: 12,
+    paddingVertical: 20,
   },
-  registerLinkText: {
+  switchLinkText: {
     fontSize: 14,
     color: "#64748B",
   },
-  registerLinkBold: {
+  switchLinkBold: {
     color: "#3B82F6",
     fontWeight: "700",
   },

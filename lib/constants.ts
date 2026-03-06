@@ -2,7 +2,7 @@ import Constants from "expo-constants";
 
 // API configuration
 export const API_BASE_URL =
-  Constants.expoConfig?.extra?.apiUrl ?? "http://localhost:8000/api/v1";
+  Constants.expoConfig?.extra?.apiUrl ?? "http://localhost:8100/api";
 
 // Secure storage keys
 export const STORAGE_KEYS = {
