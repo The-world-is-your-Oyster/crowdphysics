@@ -2,15 +2,27 @@ import { useState, useCallback, useEffect } from "react";
 import { View, Text, StyleSheet, TouchableOpacity, Alert } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
 import { SafeAreaView } from "react-native-safe-area-context";
+import { useRouter } from "expo-router";
 import { useTaskStore } from "../../lib/store";
 import { useRecording } from "../../hooks/useRecording";
+import { useUpload } from "../../hooks/useUpload";
 import { RecordingGuide } from "../../components/recording/RecordingGuide";
 import { RecordingScreen } from "../../components/recording/RecordingScreen";
 import { RecordingPreview } from "../../components/recording/RecordingPreview";
+import { UploadProgress } from "../../components/recording/UploadProgress";
+import { UploadSuccess } from "../../components/recording/UploadSuccess";
+import { UploadError } from "../../components/recording/UploadError";
 
-type RecordingPhase = "guide" | "recording" | "preview";
+type RecordingPhase =
+  | "guide"
+  | "recording"
+  | "preview"
+  | "uploading"
+  | "success"
+  | "error";
 
 export default function RecordTab() {
+  const router = useRouter();
   const selectedTask = useTaskStore((s) => s.selectedTask);
   const {
     isRecording,
@@ -26,9 +38,21 @@ export default function RecordTab() {
     startRecording,
     stopRecording,
     switchCamera,
-    reset,
+    reset: resetRecording,
     cameraRef,
   } = useRecording();
+
+  const {
+    isUploading,
+    progress,
+    error: uploadError,
+    submissionId,
+    upload,
+    retry: retryUpload,
+    cancel: cancelUpload,
+    saveForLater,
+    reset: resetUpload,
+  } = useUpload();
 
   const [phase, setPhase] = useState<RecordingPhase>("guide");
 
@@ -39,39 +63,93 @@ export default function RecordTab() {
     }
   }, [phase, videoUri, isRecording]);
 
+  // Transition based on upload state changes
+  useEffect(() => {
+    if (phase === "uploading") {
+      if (submissionId && !isUploading) {
+        setPhase("success");
+      } else if (uploadError && !isUploading) {
+        setPhase("error");
+      }
+    }
+  }, [phase, submissionId, uploadError, isUploading]);
+
+  // ─── Recording handlers ──────────────────────────────────────────────────
+
   const handleStartRecording = useCallback(async () => {
     if (!selectedTask) return;
     setPhase("recording");
-    // startRecording runs countdown then fires recordAsync (non-blocking)
     await startRecording(selectedTask.id);
   }, [selectedTask, startRecording]);
 
   const handleStopRecording = useCallback(async () => {
     await stopRecording();
-    // When stopRecording triggers, recordAsync promise will resolve and set videoUri
-    // The useEffect above will detect videoUri + !isRecording and transition to preview
   }, [stopRecording]);
 
   const handleReRecord = useCallback(() => {
-    reset();
+    resetRecording();
     setPhase("guide");
-  }, [reset]);
+  }, [resetRecording]);
 
-  const handleSubmit = useCallback(() => {
+  // ─── Upload handlers ─────────────────────────────────────────────────────
+
+  const handleSubmit = useCallback(async () => {
+    if (!selectedTask || !videoUri) return;
+    setPhase("uploading");
+    await upload(selectedTask.id, videoUri, elapsedSeconds);
+  }, [selectedTask, videoUri, elapsedSeconds, upload]);
+
+  const handleCancelUpload = useCallback(() => {
+    cancelUpload();
+    setPhase("preview");
+  }, [cancelUpload]);
+
+  const handleRetryUpload = useCallback(async () => {
+    setPhase("uploading");
+    await retryUpload();
+  }, [retryUpload]);
+
+  const handleSaveForLater = useCallback(async () => {
+    await saveForLater();
     Alert.alert(
-      "Video Saved",
-      "Your recording has been saved locally. Upload functionality will be available in a future update.",
+      "Saved",
+      "Your recording has been saved locally. It will be uploaded when you have a connection.",
       [
         {
           text: "OK",
           onPress: () => {
-            reset();
+            resetRecording();
+            resetUpload();
             setPhase("guide");
           },
         },
       ]
     );
-  }, [reset]);
+  }, [saveForLater, resetRecording, resetUpload]);
+
+  const handleErrorCancel = useCallback(() => {
+    resetUpload();
+    resetRecording();
+    setPhase("guide");
+  }, [resetUpload, resetRecording]);
+
+  // ─── Success handlers ─────────────────────────────────────────────────────
+
+  const handleRecordAnother = useCallback(() => {
+    resetRecording();
+    resetUpload();
+    setPhase("guide");
+  }, [resetRecording, resetUpload]);
+
+  const handleViewSubmissions = useCallback(() => {
+    resetRecording();
+    resetUpload();
+    setPhase("guide");
+    // Navigate to earnings/submissions tab
+    router.push("/(tabs)/earnings");
+  }, [resetRecording, resetUpload, router]);
+
+  // ─── Render ───────────────────────────────────────────────────────────────
 
   // No task selected - show empty state
   if (!selectedTask) {
@@ -145,6 +223,34 @@ export default function RecordTab() {
         formattedFileSize={formattedFileSize}
         onReRecord={handleReRecord}
         onSubmit={handleSubmit}
+      />
+    );
+  }
+
+  // Phase: Uploading
+  if (phase === "uploading") {
+    return <UploadProgress progress={progress} onCancel={handleCancelUpload} />;
+  }
+
+  // Phase: Upload success
+  if (phase === "success") {
+    return (
+      <UploadSuccess
+        payoutAmount={selectedTask.payout_usd}
+        onRecordAnother={handleRecordAnother}
+        onViewSubmissions={handleViewSubmissions}
+      />
+    );
+  }
+
+  // Phase: Upload error
+  if (phase === "error" && uploadError) {
+    return (
+      <UploadError
+        errorMessage={uploadError}
+        onRetry={handleRetryUpload}
+        onCancel={handleErrorCancel}
+        onSaveForLater={handleSaveForLater}
       />
     );
   }
