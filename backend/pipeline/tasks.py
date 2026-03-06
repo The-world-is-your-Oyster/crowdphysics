@@ -56,11 +56,11 @@ def _get_sync_session():
     from sqlalchemy import create_engine
     from sqlalchemy.orm import sessionmaker
 
-    # Sync URL: replace asyncpg driver with psycopg2
+    # Sync URL: replace asyncpg driver with psycopg (v3)
     from app.config import settings
 
     sync_url = settings.database_url.replace(
-        "postgresql+asyncpg://", "postgresql+psycopg2://"
+        "postgresql+asyncpg://", "postgresql+psycopg://"
     )
     engine = create_engine(sync_url, pool_pre_ping=True)
     Session = sessionmaker(bind=engine)

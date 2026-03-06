@@ -15,20 +15,13 @@ export function useAuth() {
     async (email: string, password: string): Promise<void> => {
       setLoading(true);
       try {
-        const response = await api.post<{ user: User; tokens: AuthTokens }>(
+        const response = await api.post<{ access_token: string; token_type: string; user: User }>(
           "/auth/login",
           { email, password }
         );
-        const { user: userData, tokens } = response.data;
-        await SecureStore.setItemAsync(
-          STORAGE_KEYS.ACCESS_TOKEN,
-          tokens.access_token
-        );
-        await SecureStore.setItemAsync(
-          STORAGE_KEYS.REFRESH_TOKEN,
-          tokens.refresh_token
-        );
-        setToken(tokens.access_token);
+        const { access_token, user: userData } = response.data;
+        await SecureStore.setItemAsync(STORAGE_KEYS.ACCESS_TOKEN, access_token);
+        setToken(access_token);
         setUser(userData);
       } finally {
         setLoading(false);
@@ -45,20 +38,13 @@ export function useAuth() {
     ): Promise<void> => {
       setLoading(true);
       try {
-        const response = await api.post<{ user: User; tokens: AuthTokens }>(
+        const response = await api.post<{ access_token: string; token_type: string; user: User }>(
           "/auth/register",
           { email, password, display_name: displayName }
         );
-        const { user: userData, tokens } = response.data;
-        await SecureStore.setItemAsync(
-          STORAGE_KEYS.ACCESS_TOKEN,
-          tokens.access_token
-        );
-        await SecureStore.setItemAsync(
-          STORAGE_KEYS.REFRESH_TOKEN,
-          tokens.refresh_token
-        );
-        setToken(tokens.access_token);
+        const { access_token, user: userData } = response.data;
+        await SecureStore.setItemAsync(STORAGE_KEYS.ACCESS_TOKEN, access_token);
+        setToken(access_token);
         setUser(userData);
       } finally {
         setLoading(false);
