@@ -1,26 +1,37 @@
-import { useQuery } from "@tanstack/react-query";
-import api from "../lib/api";
-import type { Task, PaginatedResponse } from "../lib/types";
+import { useMemo, useState, useCallback } from "react";
+import type { Task, TaskCategory } from "../lib/types";
+import { getTasksByCategory, getTaskById } from "../lib/mockTasks";
 
-export function useTasks(category?: string) {
-  return useQuery<PaginatedResponse<Task>>({
-    queryKey: ["tasks", category],
-    queryFn: async () => {
-      const params: Record<string, string> = {};
-      if (category) params.category = category;
-      const response = await api.get<PaginatedResponse<Task>>("/tasks", { params });
-      return response.data;
-    },
-  });
+/**
+ * Hook to fetch and filter the task list from mock data.
+ * Returns the filtered list, loading state, and a refresh callback.
+ */
+export function useTasks(category?: TaskCategory) {
+  const [refreshing, setRefreshing] = useState(false);
+  const [refreshKey, setRefreshKey] = useState(0);
+
+  const tasks = useMemo<Task[]>(() => {
+    // refreshKey dependency forces re-computation on pull-to-refresh
+    void refreshKey;
+    return getTasksByCategory(category);
+  }, [category, refreshKey]);
+
+  const onRefresh = useCallback(() => {
+    setRefreshing(true);
+    // Simulate network delay
+    setTimeout(() => {
+      setRefreshKey((k) => k + 1);
+      setRefreshing(false);
+    }, 800);
+  }, []);
+
+  return { tasks, refreshing, onRefresh };
 }
 
-export function useTask(id: string) {
-  return useQuery<Task>({
-    queryKey: ["task", id],
-    queryFn: async () => {
-      const response = await api.get<Task>(`/tasks/${id}`);
-      return response.data;
-    },
-    enabled: !!id,
-  });
+/**
+ * Hook to fetch a single task by ID from mock data.
+ */
+export function useTaskDetail(id: string) {
+  const task = useMemo<Task | undefined>(() => getTaskById(id), [id]);
+  return { task };
 }

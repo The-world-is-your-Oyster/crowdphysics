@@ -1,110 +1,60 @@
-import { View, Text, StyleSheet, ScrollView, TouchableOpacity } from "react-native";
+import {
+  View,
+  Text,
+  StyleSheet,
+  ScrollView,
+  TouchableOpacity,
+} from "react-native";
 import { useLocalSearchParams, useRouter } from "expo-router";
 import { Ionicons } from "@expo/vector-icons";
 import { SafeAreaView } from "react-native-safe-area-context";
-
-const MOCK_TASKS: Record<string, {
-  id: string;
-  title: string;
-  category: string;
-  difficulty: string;
-  description: string;
-  steps: string[];
-  payout_usd: number;
-  duration_min: number;
-  duration_max: number;
-  hands_required: string;
-  objects_expected: string[];
-  camera_position: string;
-  remaining_slots: number;
-}> = {
-  "1": {
-    id: "1",
-    title: "Pour water into a glass",
-    category: "kitchen",
-    difficulty: "easy",
-    description:
-      "Record yourself pouring water from a bottle or pitcher into a glass. The camera should clearly capture your hands, the container, and the glass throughout the pouring motion.",
-    steps: [
-      "Place a glass on a flat surface",
-      "Hold the water container in one hand",
-      "Begin recording",
-      "Slowly pour water into the glass until 3/4 full",
-      "Set the container down",
-      "Stop recording",
-    ],
-    payout_usd: 0.5,
-    duration_min: 10,
-    duration_max: 30,
-    hands_required: "both",
-    objects_expected: ["glass", "water bottle or pitcher"],
-    camera_position: "Front-facing, table level",
-    remaining_slots: 42,
-  },
-  "2": {
-    id: "2",
-    title: "Fold a t-shirt",
-    category: "organization",
-    difficulty: "easy",
-    description:
-      "Record yourself folding a t-shirt using any folding method. The entire shirt and your hands must be visible throughout.",
-    steps: [
-      "Lay t-shirt flat on a surface",
-      "Begin recording",
-      "Fold the t-shirt neatly",
-      "Place the folded shirt down",
-      "Stop recording",
-    ],
-    payout_usd: 0.5,
-    duration_min: 15,
-    duration_max: 45,
-    hands_required: "both",
-    objects_expected: ["t-shirt"],
-    camera_position: "Top-down or slight angle",
-    remaining_slots: 88,
-  },
-};
-
-const DIFFICULTY_COLORS: Record<string, string> = {
-  easy: "#22C55E",
-  medium: "#F59E0B",
-  hard: "#EF4444",
-};
+import { useTaskDetail } from "../../hooks/useTasks";
+import { CATEGORY_EMOJI, CATEGORY_LABEL } from "../../lib/mockTasks";
+import { useTaskStore } from "../../lib/store";
+import DifficultyBadge from "../../components/task/DifficultyBadge";
 
 export default function TaskDetailScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
   const router = useRouter();
-  const task = MOCK_TASKS[id ?? ""] ?? MOCK_TASKS["1"];
+  const { task } = useTaskDetail(id ?? "");
+  const setSelectedTask = useTaskStore((s) => s.setSelectedTask);
+
+  if (!task) {
+    return (
+      <SafeAreaView style={styles.container} edges={["bottom"]}>
+        <View style={styles.notFound}>
+          <Text style={styles.notFoundText}>Task not found</Text>
+          <TouchableOpacity onPress={() => router.back()}>
+            <Text style={styles.goBackLink}>Go back</Text>
+          </TouchableOpacity>
+        </View>
+      </SafeAreaView>
+    );
+  }
 
   return (
     <SafeAreaView style={styles.container} edges={["bottom"]}>
       <ScrollView contentContainerStyle={styles.scrollContent}>
+        {/* Hero section */}
         <View style={styles.heroSection}>
-          <View
-            style={[
-              styles.difficultyBadge,
-              { backgroundColor: (DIFFICULTY_COLORS[task.difficulty] || "#94A3B8") + "20" },
-            ]}
-          >
-            <Text
-              style={[
-                styles.difficultyText,
-                { color: DIFFICULTY_COLORS[task.difficulty] || "#94A3B8" },
-              ]}
-            >
-              {task.difficulty}
+          <View style={styles.heroTopRow}>
+            <DifficultyBadge difficulty={task.difficulty} size="md" />
+            <Text style={styles.categoryChip}>
+              {CATEGORY_EMOJI[task.category]} {CATEGORY_LABEL[task.category]}
             </Text>
           </View>
           <Text style={styles.title}>{task.title}</Text>
+          <Text style={styles.titleZh}>{task.title_zh}</Text>
           <Text style={styles.description}>{task.description}</Text>
         </View>
 
+        {/* Info grid */}
         <View style={styles.infoGrid}>
           <InfoCard
             icon="cash-outline"
             label="Payout"
             value={`$${task.payout_usd.toFixed(2)}`}
-            color="#22C55E"
+            color="#16A34A"
           />
           <InfoCard
             icon="time-outline"
@@ -126,6 +76,19 @@ export default function TaskDetailScreen() {
           />
         </View>
 
+        {/* What you need */}
+        <View style={styles.section}>
+          <Text style={styles.sectionTitle}>What You Need</Text>
+          <View style={styles.tagRow}>
+            {task.objects_expected.map((obj, i) => (
+              <View key={i} style={styles.tag}>
+                <Text style={styles.tagText}>{obj}</Text>
+              </View>
+            ))}
+          </View>
+        </View>
+
+        {/* Steps */}
         <View style={styles.section}>
           <Text style={styles.sectionTitle}>Steps</Text>
           {task.steps.map((step, index) => (
@@ -138,17 +101,7 @@ export default function TaskDetailScreen() {
           ))}
         </View>
 
-        <View style={styles.section}>
-          <Text style={styles.sectionTitle}>Required Objects</Text>
-          <View style={styles.tagRow}>
-            {task.objects_expected.map((obj, i) => (
-              <View key={i} style={styles.tag}>
-                <Text style={styles.tagText}>{obj}</Text>
-              </View>
-            ))}
-          </View>
-        </View>
-
+        {/* Camera position */}
         <View style={styles.section}>
           <Text style={styles.sectionTitle}>Camera Position</Text>
           <View style={styles.cameraNote}>
@@ -156,15 +109,39 @@ export default function TaskDetailScreen() {
             <Text style={styles.cameraText}>{task.camera_position}</Text>
           </View>
         </View>
+
+        {/* Stats */}
+        <View style={styles.section}>
+          <Text style={styles.sectionTitle}>Community Stats</Text>
+          <View style={styles.statsRow}>
+            <View style={styles.statCard}>
+              <Text style={styles.statValue}>
+                {task.total_completed.toLocaleString()}
+              </Text>
+              <Text style={styles.statLabel}>Completed</Text>
+            </View>
+            <View style={styles.statCard}>
+              <Text style={styles.statValue}>{task.remaining_slots}</Text>
+              <Text style={styles.statLabel}>Slots Remaining</Text>
+            </View>
+          </View>
+        </View>
       </ScrollView>
 
+      {/* Bottom CTA */}
       <View style={styles.bottomBar}>
         <TouchableOpacity
           style={styles.startButton}
-          onPress={() => router.push("/(tabs)/record")}
+          onPress={() => {
+            setSelectedTask(task);
+            router.push("/(tabs)/record");
+          }}
+          activeOpacity={0.8}
         >
           <Ionicons name="videocam" size={22} color="#FFFFFF" />
-          <Text style={styles.startButtonText}>Start Recording</Text>
+          <Text style={styles.startButtonText}>
+            Start Recording {"\u2014"} Earn ${task.payout_usd.toFixed(2)}
+          </Text>
         </TouchableOpacity>
       </View>
     </SafeAreaView>
@@ -197,28 +174,53 @@ const styles = StyleSheet.create({
     backgroundColor: "#F8FAFC",
   },
   scrollContent: {
-    paddingBottom: 100,
+    paddingBottom: 110,
+  },
+  notFound: {
+    flex: 1,
+    alignItems: "center",
+    justifyContent: "center",
+    gap: 12,
+  },
+  notFoundText: {
+    fontSize: 18,
+    fontWeight: "700",
+    color: "#0F172A",
+  },
+  goBackLink: {
+    fontSize: 15,
+    color: "#3B82F6",
+    fontWeight: "600",
   },
   heroSection: {
     padding: 20,
   },
-  difficultyBadge: {
-    alignSelf: "flex-start",
+  heroTopRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 10,
+    marginBottom: 14,
+  },
+  categoryChip: {
+    fontSize: 12,
+    fontWeight: "600",
+    color: "#475569",
+    backgroundColor: "#F1F5F9",
     paddingHorizontal: 10,
     paddingVertical: 4,
-    borderRadius: 6,
-    marginBottom: 12,
-  },
-  difficultyText: {
-    fontSize: 12,
-    fontWeight: "700",
-    textTransform: "uppercase",
+    borderRadius: 8,
+    overflow: "hidden",
   },
   title: {
-    fontSize: 24,
+    fontSize: 26,
     fontWeight: "800",
     color: "#0F172A",
-    marginBottom: 12,
+    marginBottom: 4,
+  },
+  titleZh: {
+    fontSize: 16,
+    color: "#94A3B8",
+    marginBottom: 14,
   },
   description: {
     fontSize: 15,
@@ -266,6 +268,22 @@ const styles = StyleSheet.create({
     color: "#0F172A",
     marginBottom: 12,
   },
+  tagRow: {
+    flexDirection: "row",
+    flexWrap: "wrap",
+    gap: 8,
+  },
+  tag: {
+    backgroundColor: "#F1F5F9",
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    borderRadius: 8,
+  },
+  tagText: {
+    fontSize: 13,
+    color: "#475569",
+    fontWeight: "500",
+  },
   stepItem: {
     flexDirection: "row",
     alignItems: "flex-start",
@@ -292,22 +310,6 @@ const styles = StyleSheet.create({
     lineHeight: 20,
     paddingTop: 4,
   },
-  tagRow: {
-    flexDirection: "row",
-    flexWrap: "wrap",
-    gap: 8,
-  },
-  tag: {
-    backgroundColor: "#F1F5F9",
-    paddingHorizontal: 12,
-    paddingVertical: 6,
-    borderRadius: 8,
-  },
-  tagText: {
-    fontSize: 13,
-    color: "#475569",
-    fontWeight: "500",
-  },
   cameraNote: {
     flexDirection: "row",
     alignItems: "center",
@@ -319,6 +321,33 @@ const styles = StyleSheet.create({
   cameraText: {
     fontSize: 14,
     color: "#1E40AF",
+    fontWeight: "500",
+  },
+  statsRow: {
+    flexDirection: "row",
+    gap: 12,
+  },
+  statCard: {
+    flex: 1,
+    backgroundColor: "#FFFFFF",
+    borderRadius: 12,
+    padding: 16,
+    alignItems: "center",
+    gap: 4,
+    shadowColor: "#000",
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.05,
+    shadowRadius: 2,
+    elevation: 1,
+  },
+  statValue: {
+    fontSize: 20,
+    fontWeight: "800",
+    color: "#0F172A",
+  },
+  statLabel: {
+    fontSize: 12,
+    color: "#94A3B8",
     fontWeight: "500",
   },
   bottomBar: {
@@ -338,9 +367,14 @@ const styles = StyleSheet.create({
     alignItems: "center",
     justifyContent: "center",
     gap: 8,
-    backgroundColor: "#3B82F6",
+    backgroundColor: "#16A34A",
     paddingVertical: 16,
-    borderRadius: 12,
+    borderRadius: 14,
+    shadowColor: "#16A34A",
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.3,
+    shadowRadius: 8,
+    elevation: 4,
   },
   startButtonText: {
     fontSize: 17,

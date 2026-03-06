@@ -1,131 +1,83 @@
-import { View, Text, FlatList, TouchableOpacity, StyleSheet } from "react-native";
-import { useRouter } from "expo-router";
-import { Ionicons } from "@expo/vector-icons";
+import { useState, useCallback } from "react";
+import {
+  View,
+  Text,
+  FlatList,
+  RefreshControl,
+  StyleSheet,
+} from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
-
-const MOCK_TASKS = [
-  {
-    id: "1",
-    title: "Pour water into a glass",
-    category: "kitchen",
-    difficulty: "easy" as const,
-    payout_usd: 0.5,
-    remaining_slots: 42,
-    duration_min: 10,
-    duration_max: 30,
-  },
-  {
-    id: "2",
-    title: "Fold a t-shirt",
-    category: "organization",
-    difficulty: "easy" as const,
-    payout_usd: 0.5,
-    remaining_slots: 88,
-    duration_min: 15,
-    duration_max: 45,
-  },
-  {
-    id: "3",
-    title: "Assemble a small LEGO set",
-    category: "assembly",
-    difficulty: "medium" as const,
-    payout_usd: 1.0,
-    remaining_slots: 15,
-    duration_min: 60,
-    duration_max: 180,
-  },
-  {
-    id: "4",
-    title: "Wipe down a kitchen counter",
-    category: "cleaning",
-    difficulty: "easy" as const,
-    payout_usd: 0.75,
-    remaining_slots: 60,
-    duration_min: 15,
-    duration_max: 45,
-  },
-];
-
-const DIFFICULTY_COLORS = {
-  easy: "#22C55E",
-  medium: "#F59E0B",
-  hard: "#EF4444",
-};
-
-const CATEGORY_ICONS: Record<string, keyof typeof Ionicons.glyphMap> = {
-  kitchen: "restaurant-outline",
-  cleaning: "sparkles-outline",
-  organization: "grid-outline",
-  assembly: "construct-outline",
-  personal_care: "hand-left-outline",
-  office: "briefcase-outline",
-  outdoor: "leaf-outline",
-};
+import type { TaskCategory, Task } from "../../lib/types";
+import { getTotalAvailableEarnings } from "../../lib/mockTasks";
+import { useTasks } from "../../hooks/useTasks";
+import CategoryFilter from "../../components/task/CategoryFilter";
+import TaskCard from "../../components/task/TaskCard";
 
 export default function TasksScreen() {
-  const router = useRouter();
+  const [selectedCategory, setSelectedCategory] = useState<
+    TaskCategory | undefined
+  >(undefined);
+  const { tasks, refreshing, onRefresh } = useTasks(selectedCategory);
+
+  const totalEarnings = getTotalAvailableEarnings();
+
+  const renderItem = useCallback(
+    ({ item }: { item: Task }) => <TaskCard task={item} />,
+    []
+  );
+
+  const keyExtractor = useCallback((item: Task) => item.id, []);
 
   return (
     <SafeAreaView style={styles.container} edges={["bottom"]}>
+      {/* Header */}
       <View style={styles.header}>
-        <Text style={styles.headerTitle}>Available Tasks</Text>
+        <View style={styles.headerTop}>
+          <Text style={styles.headerTitle}>CrowdPhysics</Text>
+          <View style={styles.earningsPill}>
+            <Text style={styles.earningsLabel}>Available</Text>
+            <Text style={styles.earningsValue}>
+              ${totalEarnings.toLocaleString("en-US", { minimumFractionDigits: 0, maximumFractionDigits: 0 })}
+            </Text>
+          </View>
+        </View>
         <Text style={styles.headerSubtitle}>
-          Complete tasks to earn rewards
+          {tasks.length} task{tasks.length !== 1 ? "s" : ""} available
         </Text>
       </View>
+
+      {/* Category filter chips */}
+      <CategoryFilter
+        selected={selectedCategory}
+        onSelect={setSelectedCategory}
+      />
+
+      {/* Task list */}
       <FlatList
-        data={MOCK_TASKS}
-        keyExtractor={(item) => item.id}
+        data={tasks}
+        keyExtractor={keyExtractor}
+        renderItem={renderItem}
         contentContainerStyle={styles.listContent}
-        renderItem={({ item }) => (
-          <TouchableOpacity
-            style={styles.taskCard}
-            onPress={() => router.push(`/task/${item.id}`)}
-            activeOpacity={0.7}
-          >
-            <View style={styles.taskIconContainer}>
-              <Ionicons
-                name={CATEGORY_ICONS[item.category] || "help-outline"}
-                size={24}
-                color="#3B82F6"
-              />
-            </View>
-            <View style={styles.taskInfo}>
-              <Text style={styles.taskTitle}>{item.title}</Text>
-              <View style={styles.taskMeta}>
-                <View
-                  style={[
-                    styles.difficultyBadge,
-                    { backgroundColor: DIFFICULTY_COLORS[item.difficulty] + "20" },
-                  ]}
-                >
-                  <Text
-                    style={[
-                      styles.difficultyText,
-                      { color: DIFFICULTY_COLORS[item.difficulty] },
-                    ]}
-                  >
-                    {item.difficulty}
-                  </Text>
-                </View>
-                <Text style={styles.duration}>
-                  {item.duration_min}-{item.duration_max}s
-                </Text>
-                <Text style={styles.slots}>{item.remaining_slots} left</Text>
-              </View>
-            </View>
-            <View style={styles.payoutContainer}>
-              <Text style={styles.payoutAmount}>
-                ${item.payout_usd.toFixed(2)}
-              </Text>
-              <Ionicons name="chevron-forward" size={16} color="#94A3B8" />
-            </View>
-          </TouchableOpacity>
-        )}
-        ItemSeparatorComponent={() => <View style={styles.separator} />}
+        ItemSeparatorComponent={Separator}
+        refreshControl={
+          <RefreshControl refreshing={refreshing} onRefresh={onRefresh} />
+        }
+        ListEmptyComponent={
+          <View style={styles.emptyState}>
+            <Text style={styles.emptyIcon}>{"\uD83D\uDCED"}</Text>
+            <Text style={styles.emptyTitle}>No tasks in this category</Text>
+            <Text style={styles.emptySubtitle}>
+              Try selecting a different category or pull to refresh
+            </Text>
+          </View>
+        }
       />
     </SafeAreaView>
   );
+}
+
+function Separator() {
+  return <View style={styles.separator} />;
 }
 
 const styles = StyleSheet.create({
@@ -136,12 +88,38 @@ const styles = StyleSheet.create({
   header: {
     paddingHorizontal: 20,
     paddingTop: 16,
-    paddingBottom: 12,
+    paddingBottom: 4,
+  },
+  headerTop: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
   },
   headerTitle: {
-    fontSize: 24,
+    fontSize: 26,
     fontWeight: "800",
     color: "#0F172A",
+  },
+  earningsPill: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 6,
+    backgroundColor: "#F0FDF4",
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    borderRadius: 20,
+    borderWidth: 1,
+    borderColor: "#BBF7D0",
+  },
+  earningsLabel: {
+    fontSize: 11,
+    fontWeight: "600",
+    color: "#16A34A",
+  },
+  earningsValue: {
+    fontSize: 14,
+    fontWeight: "800",
+    color: "#16A34A",
   },
   headerSubtitle: {
     fontSize: 14,
@@ -150,73 +128,32 @@ const styles = StyleSheet.create({
   },
   listContent: {
     paddingHorizontal: 20,
-    paddingBottom: 20,
-  },
-  taskCard: {
-    flexDirection: "row",
-    alignItems: "center",
-    backgroundColor: "#FFFFFF",
-    borderRadius: 12,
-    padding: 16,
-    shadowColor: "#000",
-    shadowOffset: { width: 0, height: 1 },
-    shadowOpacity: 0.05,
-    shadowRadius: 3,
-    elevation: 2,
-  },
-  taskIconContainer: {
-    width: 44,
-    height: 44,
-    borderRadius: 10,
-    backgroundColor: "#EFF6FF",
-    alignItems: "center",
-    justifyContent: "center",
-    marginRight: 12,
-  },
-  taskInfo: {
-    flex: 1,
-  },
-  taskTitle: {
-    fontSize: 15,
-    fontWeight: "600",
-    color: "#0F172A",
-    marginBottom: 6,
-  },
-  taskMeta: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 8,
-  },
-  difficultyBadge: {
-    paddingHorizontal: 8,
-    paddingVertical: 2,
-    borderRadius: 6,
-  },
-  difficultyText: {
-    fontSize: 11,
-    fontWeight: "700",
-    textTransform: "uppercase",
-  },
-  duration: {
-    fontSize: 12,
-    color: "#64748B",
-  },
-  slots: {
-    fontSize: 12,
-    color: "#64748B",
-  },
-  payoutContainer: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 4,
-    marginLeft: 8,
-  },
-  payoutAmount: {
-    fontSize: 16,
-    fontWeight: "700",
-    color: "#22C55E",
+    paddingBottom: 24,
   },
   separator: {
     height: 10,
+  },
+  emptyState: {
+    alignItems: "center",
+    justifyContent: "center",
+    paddingVertical: 60,
+    paddingHorizontal: 40,
+  },
+  emptyIcon: {
+    fontSize: 48,
+    marginBottom: 16,
+  },
+  emptyTitle: {
+    fontSize: 17,
+    fontWeight: "700",
+    color: "#0F172A",
+    marginBottom: 8,
+    textAlign: "center",
+  },
+  emptySubtitle: {
+    fontSize: 14,
+    color: "#94A3B8",
+    textAlign: "center",
+    lineHeight: 20,
   },
 });
