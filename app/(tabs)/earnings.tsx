@@ -1,114 +1,167 @@
-import { View, Text, StyleSheet, FlatList } from "react-native";
+import { useState, useCallback } from "react";
+import {
+  View,
+  Text,
+  StyleSheet,
+  FlatList,
+  RefreshControl,
+  ActivityIndicator,
+  TouchableOpacity,
+} from "react-native";
 import { Ionicons } from "@expo/vector-icons";
+import { useRouter } from "expo-router";
 import { SafeAreaView } from "react-native-safe-area-context";
-
-const MOCK_EARNINGS = [
-  {
-    id: "1",
-    task: "Pour water into a glass",
-    amount: 0.5,
-    status: "accepted" as const,
-    date: "2026-03-05",
-  },
-  {
-    id: "2",
-    task: "Fold a t-shirt",
-    amount: 0.5,
-    status: "processing" as const,
-    date: "2026-03-05",
-  },
-  {
-    id: "3",
-    task: "Wipe down a counter",
-    amount: 0.75,
-    status: "accepted" as const,
-    date: "2026-03-04",
-  },
-];
-
-const STATUS_CONFIG = {
-  accepted: { color: "#22C55E", icon: "checkmark-circle" as const, label: "Paid" },
-  processing: { color: "#F59E0B", icon: "time" as const, label: "Processing" },
-  rejected: { color: "#EF4444", icon: "close-circle" as const, label: "Rejected" },
-};
+import { useAuth } from "../../hooks/useAuth";
+import { useEarnings } from "../../hooks/useEarnings";
+import type { EarningEvent } from "../../hooks/useEarnings";
+import BalanceCard from "../../components/earnings/BalanceCard";
+import StatsRow from "../../components/earnings/StatsRow";
+import TimeFilter from "../../components/earnings/TimeFilter";
+import EarningItem from "../../components/earnings/EarningItem";
+import WithdrawModal from "../../components/earnings/WithdrawModal";
+import { Button } from "../../components/ui/Button";
 
 export default function EarningsScreen() {
-  const totalEarnings = MOCK_EARNINGS.filter((e) => e.status === "accepted").reduce(
-    (sum, e) => sum + e.amount,
-    0
-  );
-  const pendingEarnings = MOCK_EARNINGS.filter((e) => e.status === "processing").reduce(
-    (sum, e) => sum + e.amount,
-    0
+  const router = useRouter();
+  const { isAuthenticated } = useAuth();
+  const {
+    balance,
+    history,
+    isLoading,
+    timeFilter,
+    setTimeFilter,
+    refresh,
+  } = useEarnings();
+  const [withdrawVisible, setWithdrawVisible] = useState(false);
+  const [refreshing, setRefreshing] = useState(false);
+
+  const handleRefresh = useCallback(async () => {
+    setRefreshing(true);
+    await refresh();
+    setRefreshing(false);
+  }, [refresh]);
+
+  const renderItem = useCallback(
+    ({ item }: { item: EarningEvent }) => (
+      <View style={styles.itemPadding}>
+        <EarningItem item={item} />
+      </View>
+    ),
+    []
   );
 
+  const keyExtractor = useCallback((item: EarningEvent) => item.id, []);
+
+  // ── Not authenticated ──────────────────────────────────────────────
+  if (!isAuthenticated) {
+    return (
+      <SafeAreaView style={styles.container} edges={["bottom"]}>
+        <View style={styles.unauthContainer}>
+          <View style={styles.unauthIcon}>
+            <Ionicons name="wallet-outline" size={48} color="#94A3B8" />
+          </View>
+          <Text style={styles.unauthTitle}>Track your earnings</Text>
+          <Text style={styles.unauthSubtitle}>
+            Sign in to see your balance, earnings history, and withdraw funds
+          </Text>
+          <Button
+            title="Sign In"
+            onPress={() => router.push("/auth/login")}
+            variant="primary"
+            icon="log-in-outline"
+            style={styles.unauthButton}
+          />
+          <TouchableOpacity
+            style={styles.unauthRegisterLink}
+            onPress={() => router.push("/auth/register")}
+          >
+            <Text style={styles.unauthRegisterText}>
+              Don't have an account?{" "}
+              <Text style={styles.unauthRegisterBold}>Sign Up</Text>
+            </Text>
+          </TouchableOpacity>
+        </View>
+      </SafeAreaView>
+    );
+  }
+
+  // ── Loading ────────────────────────────────────────────────────────
+  if (isLoading) {
+    return (
+      <SafeAreaView style={styles.container} edges={["bottom"]}>
+        <View style={styles.loadingContainer}>
+          <ActivityIndicator size="large" color="#3B82F6" />
+          <Text style={styles.loadingText}>Loading earnings...</Text>
+        </View>
+      </SafeAreaView>
+    );
+  }
+
+  // ── Main Content ───────────────────────────────────────────────────
   return (
     <SafeAreaView style={styles.container} edges={["bottom"]}>
-      <View style={styles.summaryCard}>
-        <View style={styles.summaryMain}>
-          <Text style={styles.summaryLabel}>Total Earned</Text>
-          <Text style={styles.summaryAmount}>${totalEarnings.toFixed(2)}</Text>
-        </View>
-        <View style={styles.summaryDivider} />
-        <View style={styles.summarySecondary}>
-          <View style={styles.summaryItem}>
-            <Text style={styles.summaryItemLabel}>Pending</Text>
-            <Text style={styles.summaryItemValue}>
-              ${pendingEarnings.toFixed(2)}
-            </Text>
-          </View>
-          <View style={styles.summaryItem}>
-            <Text style={styles.summaryItemLabel}>Tasks Done</Text>
-            <Text style={styles.summaryItemValue}>{MOCK_EARNINGS.length}</Text>
-          </View>
-        </View>
-      </View>
-
-      <Text style={styles.sectionTitle}>Recent Activity</Text>
-
       <FlatList
-        data={MOCK_EARNINGS}
-        keyExtractor={(item) => item.id}
+        data={history}
+        keyExtractor={keyExtractor}
+        renderItem={renderItem}
         contentContainerStyle={styles.listContent}
-        renderItem={({ item }) => {
-          const statusConfig =
-            STATUS_CONFIG[item.status as keyof typeof STATUS_CONFIG] ||
-            STATUS_CONFIG.processing;
-          return (
-            <View style={styles.earningItem}>
-              <View
-                style={[
-                  styles.statusIcon,
-                  { backgroundColor: statusConfig.color + "20" },
-                ]}
-              >
-                <Ionicons
-                  name={statusConfig.icon}
-                  size={20}
-                  color={statusConfig.color}
-                />
-              </View>
-              <View style={styles.earningInfo}>
-                <Text style={styles.earningTask}>{item.task}</Text>
-                <Text style={styles.earningDate}>{item.date}</Text>
-              </View>
-              <View style={styles.earningRight}>
-                <Text style={styles.earningAmount}>
-                  ${item.amount.toFixed(2)}
-                </Text>
-                <Text
-                  style={[styles.earningStatus, { color: statusConfig.color }]}
-                >
-                  {statusConfig.label}
-                </Text>
+        ItemSeparatorComponent={Separator}
+        showsVerticalScrollIndicator={false}
+        refreshControl={
+          <RefreshControl
+            refreshing={refreshing}
+            onRefresh={handleRefresh}
+            tintColor="#3B82F6"
+          />
+        }
+        ListHeaderComponent={
+          <>
+            {/* Balance Card */}
+            <BalanceCard
+              balance={balance}
+              onWithdraw={() => setWithdrawVisible(true)}
+            />
+
+            {/* Stats Row */}
+            <View style={styles.statsSpacing}>
+              <StatsRow />
+            </View>
+
+            {/* Time Filter */}
+            <TimeFilter active={timeFilter} onChange={setTimeFilter} />
+
+            {/* Section Header */}
+            <View style={styles.sectionHeader}>
+              <Text style={styles.sectionTitle}>Earnings History</Text>
+              <View style={styles.countBadge}>
+                <Text style={styles.countText}>{history.length}</Text>
               </View>
             </View>
-          );
-        }}
-        ItemSeparatorComponent={() => <View style={styles.separator} />}
+          </>
+        }
+        ListEmptyComponent={
+          <View style={styles.emptyState}>
+            <Text style={styles.emptyIcon}>{"\uD83D\uDCB0"}</Text>
+            <Text style={styles.emptyTitle}>No earnings yet</Text>
+            <Text style={styles.emptySubtitle}>
+              Start recording tasks to earn money!
+            </Text>
+          </View>
+        }
+      />
+
+      {/* Withdraw Modal */}
+      <WithdrawModal
+        visible={withdrawVisible}
+        onClose={() => setWithdrawVisible(false)}
+        balance={balance}
       />
     </SafeAreaView>
   );
+}
+
+function Separator() {
+  return <View style={styles.separator} />;
 }
 
 const styles = StyleSheet.create({
@@ -116,101 +169,122 @@ const styles = StyleSheet.create({
     flex: 1,
     backgroundColor: "#F8FAFC",
   },
-  summaryCard: {
-    backgroundColor: "#0F172A",
-    margin: 20,
-    borderRadius: 16,
-    padding: 24,
+  listContent: {
+    paddingBottom: 24,
   },
-  summaryMain: {
-    alignItems: "center",
-    marginBottom: 16,
+  statsSpacing: {
+    paddingTop: 16,
   },
-  summaryLabel: {
-    fontSize: 14,
-    color: "#94A3B8",
-    marginBottom: 4,
-  },
-  summaryAmount: {
-    fontSize: 36,
-    fontWeight: "800",
-    color: "#22C55E",
-  },
-  summaryDivider: {
-    height: 1,
-    backgroundColor: "#1E293B",
-    marginBottom: 16,
-  },
-  summarySecondary: {
+  sectionHeader: {
     flexDirection: "row",
-    justifyContent: "space-around",
-  },
-  summaryItem: {
     alignItems: "center",
-  },
-  summaryItemLabel: {
-    fontSize: 12,
-    color: "#64748B",
-    marginBottom: 4,
-  },
-  summaryItemValue: {
-    fontSize: 18,
-    fontWeight: "700",
-    color: "#F8FAFC",
+    paddingHorizontal: 20,
+    paddingBottom: 10,
+    gap: 8,
   },
   sectionTitle: {
     fontSize: 18,
     fontWeight: "700",
     color: "#0F172A",
-    paddingHorizontal: 20,
-    marginBottom: 12,
   },
-  listContent: {
-    paddingHorizontal: 20,
-    paddingBottom: 20,
-  },
-  earningItem: {
-    flexDirection: "row",
-    alignItems: "center",
-    backgroundColor: "#FFFFFF",
-    borderRadius: 12,
-    padding: 14,
-  },
-  statusIcon: {
-    width: 40,
-    height: 40,
+  countBadge: {
+    backgroundColor: "#E2E8F0",
     borderRadius: 10,
-    alignItems: "center",
-    justifyContent: "center",
-    marginRight: 12,
+    paddingHorizontal: 8,
+    paddingVertical: 2,
   },
-  earningInfo: {
-    flex: 1,
-  },
-  earningTask: {
-    fontSize: 14,
-    fontWeight: "600",
-    color: "#0F172A",
-    marginBottom: 4,
-  },
-  earningDate: {
+  countText: {
     fontSize: 12,
-    color: "#64748B",
-  },
-  earningRight: {
-    alignItems: "flex-end",
-  },
-  earningAmount: {
-    fontSize: 16,
     fontWeight: "700",
-    color: "#0F172A",
-    marginBottom: 2,
+    color: "#475569",
   },
-  earningStatus: {
-    fontSize: 11,
-    fontWeight: "600",
+  itemPadding: {
+    paddingHorizontal: 20,
   },
   separator: {
     height: 8,
+  },
+
+  // Loading
+  loadingContainer: {
+    flex: 1,
+    alignItems: "center",
+    justifyContent: "center",
+    gap: 12,
+  },
+  loadingText: {
+    fontSize: 14,
+    color: "#94A3B8",
+  },
+
+  // Empty
+  emptyState: {
+    alignItems: "center",
+    justifyContent: "center",
+    paddingVertical: 48,
+    paddingHorizontal: 40,
+  },
+  emptyIcon: {
+    fontSize: 48,
+    marginBottom: 16,
+  },
+  emptyTitle: {
+    fontSize: 17,
+    fontWeight: "700",
+    color: "#0F172A",
+    marginBottom: 8,
+    textAlign: "center",
+  },
+  emptySubtitle: {
+    fontSize: 14,
+    color: "#94A3B8",
+    textAlign: "center",
+    lineHeight: 20,
+  },
+
+  // Unauthenticated
+  unauthContainer: {
+    flex: 1,
+    justifyContent: "center",
+    alignItems: "center",
+    paddingHorizontal: 40,
+  },
+  unauthIcon: {
+    width: 96,
+    height: 96,
+    borderRadius: 48,
+    backgroundColor: "#F1F5F9",
+    alignItems: "center",
+    justifyContent: "center",
+    marginBottom: 24,
+  },
+  unauthTitle: {
+    fontSize: 20,
+    fontWeight: "700",
+    color: "#0F172A",
+    textAlign: "center",
+    marginBottom: 8,
+  },
+  unauthSubtitle: {
+    fontSize: 14,
+    color: "#64748B",
+    textAlign: "center",
+    lineHeight: 20,
+    marginBottom: 32,
+  },
+  unauthButton: {
+    width: "100%",
+    marginBottom: 16,
+  },
+  unauthRegisterLink: {
+    paddingVertical: 8,
+  },
+  unauthRegisterText: {
+    fontSize: 14,
+    color: "#64748B",
+  },
+  unauthRegisterBold: {
+    color: "#3B82F6",
+    fontWeight: "700",
   },
 });
